@@ -1,0 +1,25 @@
+{
+  "name": "Postmark MCP",
+  "description": "Send emails through Postmark using AI-powered composition. Perfect for developers who want to integrate email capabilities into their AI applications.",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "repository": "https://github.com/yourusername/postmark-api-mcp",
+  "keywords": ["postmark", "email", "mcp", "cursor", "ai", "automation"],
+  "cursorVersion": ">=1.0.0",
+  "features": [
+    "AI-powered email composition",
+    "Template management",
+    "Batch email sending",
+    "Real-time validation",
+    "Docker support"
+  ],
+  "installation": {
+    "type": "script",
+    "command": "./install.sh"
+  },
+  "documentation": "https://github.com/yourusername/postmark-api-mcp#readme",
+  "support": {
+    "issues": "https://github.com/yourusername/postmark-api-mcp/issues",
+    "discussions": "https://github.com/yourusername/postmark-api-mcp/discussions"
+  }
+} 
