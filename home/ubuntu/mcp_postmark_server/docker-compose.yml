@@ -1,0 +1,16 @@
+# Docker Compose configuration for MCP Postmark Server
+version: '3'
+
+services:
+  mcp-postmark-server:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - POSTMARK_SERVER_TOKEN=${POSTMARK_SERVER_TOKEN}
+      - DEFAULT_FROM_ADDRESS=${DEFAULT_FROM_ADDRESS}
+      - DEFAULT_MESSAGE_STREAM=${DEFAULT_MESSAGE_STREAM}
+      - PORT=3000
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
+      - ENABLE_LOGGING=${ENABLE_LOGGING}
+    restart: unless-stopped
