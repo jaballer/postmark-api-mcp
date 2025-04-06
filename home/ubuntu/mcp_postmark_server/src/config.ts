@@ -25,5 +25,7 @@ export const config = {
   security: {
     rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '60', 10),
     enableLogging: process.env.ENABLE_LOGGING === 'true',
-  }
+  },
+
+  port: parseInt(process.env.PORT || '3000', 10),
 };

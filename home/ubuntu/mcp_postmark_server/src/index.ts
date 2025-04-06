@@ -1,6 +1,8 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import express from 'express';
+import bodyParser from 'body-parser';
+import cors from 'cors';
 import { PostmarkMcpServer } from './mcp-server';
+import { config } from './config';
 
 /**
  * Main entry point for the MCP Postmark server
@@ -11,38 +13,42 @@ async function main() {
     
     // Create the MCP server for Postmark
     const postmarkServer = new PostmarkMcpServer();
-    const mcpServer = postmarkServer.getServer();
     
-    // Determine transport type from command line arguments
-    const args = process.argv.slice(2);
-    const useHttp = args.includes('--http');
+    // Create Express app
+    const app = express();
     
-    if (useHttp) {
-      // Use HTTP transport
-      const port = parseInt(process.env.PORT || '3000', 10);
-      console.log(`Starting HTTP server on port ${port}...`);
-      
+    // Middleware
+    app.use(cors());
+    app.use(bodyParser.json());
+    
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+      res.json({ status: 'ok' });
+    });
+    
+    // MCP endpoints
+    app.post('/', async (req, res) => {
       try {
-        // Note: This would normally use HttpServerTransport, but we're using stdio for testing
-        console.log('HTTP transport not available in test environment, falling back to stdio');
-        const transport = new StdioServerTransport();
-        await mcpServer.connect(transport);
-        console.log('MCP Postmark server running with stdio transport (HTTP fallback)');
+        const result = await postmarkServer.handleRequest(req.body);
+        res.json(result);
       } catch (error) {
-        console.error('Failed to start transport:', error);
-        console.log('Falling back to stdio transport...');
-        
-        const transport = new StdioServerTransport();
-        await mcpServer.connect(transport);
-        console.log('MCP Postmark server running with stdio transport');
+        console.error('Error handling request:', error);
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Internal server error'
+          }
+        });
       }
-    } else {
-      // Use stdio transport (default)
-      console.log('Starting with stdio transport...');
-      const transport = new StdioServerTransport();
-      await mcpServer.connect(transport);
-      console.log('MCP Postmark server running with stdio transport');
-    }
+    });
+    
+    // Start the server
+    const port = config.port;
+    app.listen(port, () => {
+      console.log(`MCP Postmark server running on port ${port}`);
+    });
+    
   } catch (error) {
     console.error('Failed to start MCP Postmark server:', error);
     process.exit(1);

@@ -1,197 +1,65 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { PostmarkApiClient } from './postmark-client';
-import { EmailFormatter, McpEmailInput, McpTemplateInput } from './email-formatter';
+import { JSONRPCServer } from 'json-rpc-2.0';
+import { PostmarkClient } from './postmark-client';
 import { config } from './config';
+
+interface EmailParams {
+  from: string;
+  to: string;
+  subject: string;
+  textBody?: string;
+  htmlBody?: string;
+  trackOpens?: boolean;
+}
+
+interface TemplateEmailParams {
+  from: string;
+  to: string;
+  templateId: number;
+  templateModel: Record<string, any>;
+}
+
+interface BatchEmailParams {
+  emails: EmailParams[];
+}
 
 /**
  * MCP Server implementation for Postmark
  */
 export class PostmarkMcpServer {
-  private server: McpServer;
-  private postmarkClient: PostmarkApiClient;
-  private emailFormatter: EmailFormatter;
+  private server: JSONRPCServer;
+  private postmarkClient: PostmarkClient;
 
   constructor() {
-    // Initialize MCP server
-    this.server = new McpServer({
-      name: config.mcp.name,
-      version: config.mcp.version
-    });
+    this.postmarkClient = new PostmarkClient();
+    this.server = new JSONRPCServer();
 
-    // Initialize Postmark client and email formatter
-    this.postmarkClient = new PostmarkApiClient();
-    this.emailFormatter = new EmailFormatter();
-
-    // Register tools
+    // Register available tools
     this.registerTools();
   }
 
-  /**
-   * Register all email tools with the MCP server
-   */
-  private registerTools(): void {
-    this.registerSendEmailTool();
-    this.registerSendTemplateEmailTool();
-    this.registerSendBatchEmailsTool();
+  private registerTools() {
+    // Register email sending tool
+    this.server.addMethod('send_email', async (params: EmailParams) => {
+      return this.postmarkClient.sendEmail(params);
+    });
+
+    // Register template email sending tool
+    this.server.addMethod('send_template_email', async (params: TemplateEmailParams) => {
+      return this.postmarkClient.sendTemplateEmail(params);
+    });
+
+    // Register batch email sending tool
+    this.server.addMethod('send_batch_emails', async (params: BatchEmailParams) => {
+      return this.postmarkClient.sendBatchEmails(params);
+    });
   }
 
-  /**
-   * Register the send_email tool
-   */
-  private registerSendEmailTool(): void {
-    this.server.tool(
-      'send_email',
-      'Send an email through Postmark',
-      async (args) => {
-        try {
-          const params = args as unknown as McpEmailInput;
-          
-          // Use default from address if not provided
-          if (!params.from && config.postmark.defaultFromAddress) {
-            params.from = config.postmark.defaultFromAddress;
-          }
-
-          // Format the request for Postmark
-          const postmarkRequest = this.emailFormatter.formatEmailRequest(params);
-          
-          // Send the email
-          const response = await this.postmarkClient.sendEmail(postmarkRequest);
-          
-          // Format the response for MCP
-          const formattedResponse = this.emailFormatter.formatResponse(response);
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Email sent successfully to ${formattedResponse.to} with ID ${formattedResponse.messageId}`
-              }
-            ],
-            isError: false
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to send email: ${error instanceof Error ? error.message : String(error)}`
-              }
-            ],
-            isError: true
-          };
-        }
-      }
-    );
-  }
-
-  /**
-   * Register the send_template_email tool
-   */
-  private registerSendTemplateEmailTool(): void {
-    this.server.tool(
-      'send_template_email',
-      'Send an email using a Postmark template',
-      async (args) => {
-        try {
-          const params = args as unknown as McpTemplateInput;
-          
-          // Use default from address if not provided
-          if (!params.from && config.postmark.defaultFromAddress) {
-            params.from = config.postmark.defaultFromAddress;
-          }
-
-          // Format the request for Postmark
-          const postmarkRequest = this.emailFormatter.formatTemplateRequest(params);
-          
-          // Send the template email
-          const response = await this.postmarkClient.sendTemplateEmail(postmarkRequest);
-          
-          // Format the response for MCP
-          const formattedResponse = this.emailFormatter.formatResponse(response);
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Template email sent successfully to ${formattedResponse.to} with ID ${formattedResponse.messageId}`
-              }
-            ],
-            isError: false
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to send template email: ${error instanceof Error ? error.message : String(error)}`
-              }
-            ],
-            isError: true
-          };
-        }
-      }
-    );
-  }
-
-  /**
-   * Register the send_batch_emails tool
-   */
-  private registerSendBatchEmailsTool(): void {
-    this.server.tool(
-      'send_batch_emails',
-      'Send multiple emails in a batch',
-      async (args) => {
-        try {
-          const params = args as unknown as { emails: McpEmailInput[] };
-          
-          // Format each email for Postmark
-          const postmarkRequests = params.emails.map(email => {
-            // Use default from address if not provided
-            if (!email.from && config.postmark.defaultFromAddress) {
-              email.from = config.postmark.defaultFromAddress;
-            }
-            return this.emailFormatter.formatEmailRequest(email);
-          });
-          
-          // Send batch emails
-          const responses = await this.postmarkClient.sendBatchEmails(postmarkRequests);
-          
-          // Format the responses for MCP
-          const formattedResponses = responses.map(response => this.emailFormatter.formatResponse(response));
-          
-          // Count successful and failed emails
-          const successful = formattedResponses.filter(r => r.status === 'sent').length;
-          const failed = formattedResponses.length - successful;
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Batch email sending completed: ${successful} successful, ${failed} failed`
-              }
-            ],
-            isError: failed > 0
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Failed to send batch emails: ${error instanceof Error ? error.message : String(error)}`
-              }
-            ],
-            isError: true
-          };
-        }
-      }
-    );
-  }
-
-  /**
-   * Get the MCP server instance
-   * @returns The MCP server instance
-   */
-  getServer(): McpServer {
-    return this.server;
+  public async handleRequest(request: any) {
+    try {
+      return await this.server.receive(request);
+    } catch (error) {
+      console.error('Error handling request:', error);
+      throw error;
+    }
   }
 }

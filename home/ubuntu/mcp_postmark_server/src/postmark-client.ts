@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { Client } from 'postmark';
 import { config } from './config';
 
 /**
@@ -51,103 +51,102 @@ export interface PostmarkTemplateRequest {
   MessageStream?: string;
 }
 
-/**
- * Postmark API client for sending emails
- */
-export class PostmarkApiClient {
-  private readonly baseUrl = 'https://api.postmarkapp.com';
-  private readonly headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Postmark-Server-Token': config.postmark.serverToken
-  };
+export class PostmarkClient {
+  private client: Client;
 
-  /**
-   * Send a single email through Postmark
-   * @param emailRequest The email request data
-   * @returns Promise with the email response
-   */
-  async sendEmail(emailRequest: PostmarkEmailRequest): Promise<PostmarkEmailResponse> {
-    try {
-      // Set default message stream if not provided
-      if (!emailRequest.MessageStream) {
-        emailRequest.MessageStream = config.postmark.defaultMessageStream;
-      }
-
-      const response = await axios.post<PostmarkEmailResponse>(
-        `${this.baseUrl}/email`,
-        emailRequest,
-        { headers: this.headers }
-      );
-
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Handle Postmark API errors
-        const errorData = error.response.data;
-        throw new Error(`Postmark API error: ${errorData.Message} (Code: ${errorData.ErrorCode})`);
-      }
-      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  constructor() {
+    this.client = new Client(config.postmark.serverToken);
   }
 
-  /**
-   * Send a batch of emails through Postmark
-   * @param emailRequests Array of email request data
-   * @returns Promise with array of email responses
-   */
-  async sendBatchEmails(emailRequests: PostmarkEmailRequest[]): Promise<PostmarkEmailResponse[]> {
+  async sendEmail(params: {
+    from: string;
+    to: string;
+    subject: string;
+    textBody?: string;
+    htmlBody?: string;
+    trackOpens?: boolean;
+  }) {
     try {
-      // Set default message stream if not provided for each email
-      emailRequests.forEach(email => {
-        if (!email.MessageStream) {
-          email.MessageStream = config.postmark.defaultMessageStream;
-        }
+      const response = await this.client.sendEmail({
+        From: params.from || config.postmark.defaultFromAddress,
+        To: params.to,
+        Subject: params.subject,
+        TextBody: params.textBody,
+        HtmlBody: params.htmlBody,
+        TrackOpens: params.trackOpens,
+        MessageStream: config.postmark.defaultMessageStream,
       });
 
-      const response = await axios.post<PostmarkEmailResponse[]>(
-        `${this.baseUrl}/email/batch`,
-        emailRequests,
-        { headers: this.headers }
-      );
-
-      return response.data;
+      return {
+        messageId: response.MessageID,
+        to: response.To,
+        submittedAt: response.SubmittedAt,
+        status: 'sent',
+      };
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Handle Postmark API errors
-        const errorData = error.response.data;
-        throw new Error(`Postmark API error: ${errorData.Message} (Code: ${errorData.ErrorCode})`);
-      }
-      throw new Error(`Failed to send batch emails: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error sending email:', error);
+      throw error;
     }
   }
 
-  /**
-   * Send an email using a Postmark template
-   * @param templateRequest The template request data
-   * @returns Promise with the email response
-   */
-  async sendTemplateEmail(templateRequest: PostmarkTemplateRequest): Promise<PostmarkEmailResponse> {
+  async sendTemplateEmail(params: {
+    from: string;
+    to: string;
+    templateId: number;
+    templateModel: Record<string, any>;
+  }) {
     try {
-      // Set default message stream if not provided
-      if (!templateRequest.MessageStream) {
-        templateRequest.MessageStream = config.postmark.defaultMessageStream;
-      }
+      const response = await this.client.sendEmailWithTemplate({
+        From: params.from || config.postmark.defaultFromAddress,
+        To: params.to,
+        TemplateId: params.templateId,
+        TemplateModel: params.templateModel,
+        MessageStream: config.postmark.defaultMessageStream,
+      });
 
-      const response = await axios.post<PostmarkEmailResponse>(
-        `${this.baseUrl}/email/withTemplate`,
-        templateRequest,
-        { headers: this.headers }
-      );
-
-      return response.data;
+      return {
+        messageId: response.MessageID,
+        to: response.To,
+        submittedAt: response.SubmittedAt,
+        status: 'sent',
+      };
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        // Handle Postmark API errors
-        const errorData = error.response.data;
-        throw new Error(`Postmark API error: ${errorData.Message} (Code: ${errorData.ErrorCode})`);
-      }
-      throw new Error(`Failed to send template email: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error sending template email:', error);
+      throw error;
+    }
+  }
+
+  async sendBatchEmails(params: { emails: Array<{
+    from: string;
+    to: string;
+    subject: string;
+    textBody?: string;
+    htmlBody?: string;
+    trackOpens?: boolean;
+  }>}) {
+    try {
+      const messages = params.emails.map(email => ({
+        From: email.from || config.postmark.defaultFromAddress,
+        To: email.to,
+        Subject: email.subject,
+        TextBody: email.textBody,
+        HtmlBody: email.htmlBody,
+        TrackOpens: email.trackOpens,
+        MessageStream: config.postmark.defaultMessageStream,
+      }));
+
+      const responses = await this.client.sendEmailBatch(messages);
+
+      return responses.map(response => ({
+        messageId: response.MessageID,
+        to: response.To,
+        submittedAt: response.SubmittedAt,
+        status: response.ErrorCode === 0 ? 'sent' : 'failed',
+        error: response.ErrorCode !== 0 ? response.Message : undefined,
+      }));
+    } catch (error) {
+      console.error('Error sending batch emails:', error);
+      throw error;
     }
   }
 }
