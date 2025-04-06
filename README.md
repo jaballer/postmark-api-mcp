@@ -10,12 +10,16 @@ This server implements the [Model Context Protocol (MCP)](https://spec.modelcont
 - Support for both stdio and HTTP transports
 - Configurable via environment variables
 - Error handling and validation
+- Health check endpoint for monitoring
+- Rate limiting and logging configuration
+- Docker support for development and production
 
 ## Prerequisites
 
 - Node.js 16 or higher
 - npm or yarn
 - A Postmark account with an API token
+- Docker and Docker Compose (optional, for containerized deployment)
 
 ## Installation
 
@@ -47,7 +51,13 @@ ENABLE_LOGGING=true
 
 ### Starting the Server
 
-#### With stdio transport (default):
+#### Development Mode (with hot-reloading):
+
+```bash
+npm run dev:http
+```
+
+#### Production Mode:
 
 ```bash
 npm start
@@ -57,6 +67,49 @@ npm start
 
 ```bash
 npm run start:http
+```
+
+### Testing the Server
+
+#### Health Check
+
+```bash
+curl http://localhost:3000/health
+```
+
+Expected response:
+```json
+{"status":"ok"}
+```
+
+#### Send Test Email
+
+```bash
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "test-email-1",
+    "method": "send_email",
+    "params": {
+      "from": "info@jabaltorres.com",
+      "to": "jabaltorres@gmail.com",
+      "subject": "Test Email",
+      "textBody": "This is a test email from the MCP Postmark server"
+    }
+  }'
+```
+
+Expected response:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "test-email-1",
+  "result": {
+    "messageId": "12345678-1234-1234-1234-123456789012",
+    "status": "sent"
+  }
+}
 ```
 
 ### Interacting with the Server
@@ -190,6 +243,35 @@ npm run build
 
 ```bash
 npm test
+```
+
+### Docker Development
+
+For local development with Docker:
+
+```bash
+docker-compose up --build
+```
+
+This will:
+- Mount your local source code
+- Enable hot-reloading
+- Use development environment variables
+
+### Docker Production
+
+For production deployment:
+
+```bash
+docker build -t mcp-postmark-server .
+docker run -p 3000:3000 \
+  -e POSTMARK_SERVER_TOKEN=your_token \
+  -e DEFAULT_FROM_ADDRESS=your_email@example.com \
+  -e DEFAULT_MESSAGE_STREAM=outbound \
+  -e PORT=3000 \
+  -e RATE_LIMIT_MAX_REQUESTS=60 \
+  -e ENABLE_LOGGING=true \
+  mcp-postmark-server
 ```
 
 ## Architecture
